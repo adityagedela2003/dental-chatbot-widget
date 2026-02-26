@@ -1,6 +1,6 @@
 (function () {
 
-  var API_URL = "http://127.0.0.1:8000/chat";
+  var API_URL = ""https://web-production-d199d.up.railway.app/chat"";
 
   // ── STATE ────────────────────────────────────────────────────────────────
   var messages        = [];
