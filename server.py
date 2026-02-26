@@ -203,15 +203,20 @@ async def chat(req: ChatRequest):
     )
     reply = response.content[0].text
 
-    # ── Save lead only once — when phone is confirmed AND lead not yet saved ───
-    # We include reply in messages so extract_lead has the full closing summary
-    if just_confirmed and not lead_saved:
+    # ── Save lead only once — when Aria gives closing confirmation ───────────
+    # We wait for Aria's closing reply (which has all data) before extracting.
+    # Detect closing by checking if reply contains confirmation keywords.
+    closing_keywords = ["receptionist will call", "will call you", "call you shortly"]
+    is_closing_reply = any(kw in reply.lower() for kw in closing_keywords)
+
+    if phone_confirmed and is_closing_reply and not lead_saved:
+        # Include Aria's closing reply so extract_lead sees the full summary
         full_messages = messages + [{"role": "assistant", "content": reply}]
         lead = extract_lead(full_messages, user_text)
         if lead and lead.get("name") and lead.get("phone"):
             saved = save_lead_to_sheet(lead)
             if saved:
-                lead_saved = True   # mark as saved so it never runs again
+                lead_saved = True
         
     return ChatResponse(
         reply=reply,
