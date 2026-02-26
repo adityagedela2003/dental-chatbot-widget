@@ -254,9 +254,36 @@ phone: <value>
 
     return lead
 
-# ── SERVE STATIC FILES ────────────────────────────────────────────────────────
-app.mount("/static", StaticFiles(directory="static"), name="static")
+# ── DEBUG ENDPOINT ───────────────────────────────────────────────────────────
+@app.get("/test-sheets")
+async def test_sheets():
+    """Test Google Sheets connection - remove after debugging."""
+    import traceback
+    try:
+        creds_json = os.getenv("GOOGLE_CREDENTIALS")
+        if not creds_json:
+            return {"status": "error", "message": "GOOGLE_CREDENTIALS env var not set"}
+        
+        creds_dict = json.loads(creds_json)
+        scopes = [
+            "https://www.googleapis.com/auth/spreadsheets",
+            "https://www.googleapis.com/auth/drive"
+        ]
+        creds = Credentials.from_service_account_info(creds_dict, scopes=scopes)
+        gc = gspread.authorize(creds)
+        
+        sheet_name = os.getenv("GOOGLE_SHEET_NAME", "Dental Leads")
+        sheet = gc.open(sheet_name).sheet1
+        
+        # Try writing a test row
+        from datetime import datetime
+        sheet.append_row([datetime.now().strftime("%Y-%m-%d %H:%M"), "TEST", "+91TEST", "Test", "Test", "Test Row"])
+        return {"status": "success", "message": f"Connected to sheet: {sheet_name} and wrote test row!"}
+    
+    except Exception as e:
+        return {"status": "error", "message": str(e), "trace": traceback.format_exc()}
 
+# ── SERVE STATIC FILES ────────────────────────────────────────────────────────
 @app.get("/")
 async def serve_index():
     return FileResponse("static/index.html")
@@ -264,3 +291,5 @@ async def serve_index():
 @app.get("/widget.js")
 async def serve_widget():
     return FileResponse("static/widget.js", media_type="application/javascript")
+
+app.mount("/static", StaticFiles(directory="static"), name="static")
