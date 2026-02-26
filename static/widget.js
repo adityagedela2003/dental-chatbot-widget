@@ -5,6 +5,7 @@
   // ── STATE ────────────────────────────────────────────────────────────────
   var messages        = [];
   var phoneConfirmed  = false;
+  var leadSaved       = false;
   var isOpen          = false;
   var isTyping        = false;
 
@@ -260,7 +261,8 @@
     xhr.onerror = function() { callback(new Error("Network error"), null); };
     xhr.send(JSON.stringify({
       messages:        messages,
-      phone_confirmed: phoneConfirmed
+      phone_confirmed: phoneConfirmed,
+      lead_saved:      leadSaved
     }));
   }
 
@@ -282,6 +284,7 @@
         addBubble("bot", "Sorry, I'm having trouble connecting. Please try again.");
       } else {
         phoneConfirmed  = data.phone_confirmed;
+        leadSaved       = data.lead_saved;
         addBubble("bot", data.reply);
         messages.push({ role: "assistant", content: data.reply });
 
@@ -310,6 +313,7 @@
         addBubble("bot", "Hi! Welcome to Bright Smile Dental. How can I help you today?");
       } else {
         phoneConfirmed  = data.phone_confirmed;
+        leadSaved       = data.lead_saved;
         addBubble("bot", data.reply);
         messages.push({ role: "assistant", content: data.reply });
       }

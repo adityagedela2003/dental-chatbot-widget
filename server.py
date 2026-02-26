@@ -148,10 +148,12 @@ def validate_indian_phone(text: str):
 class ChatRequest(BaseModel):
     messages: list
     phone_confirmed: bool
+    lead_saved: bool        # True once lead has been saved to sheet — never save again
 
 class ChatResponse(BaseModel):
     reply: str
     phone_confirmed: bool
+    lead_saved: bool
     lead: Optional[Dict] = None
 
 # ── CHAT ENDPOINT ─────────────────────────────────────────────────────────────
@@ -160,15 +162,18 @@ async def chat(req: ChatRequest):
 
     messages        = req.messages
     phone_confirmed = req.phone_confirmed
+    lead_saved      = req.lead_saved      # if True, never save again
     user_text       = messages[-1]["content"] if messages else ""
     inject_note     = ""
     lead            = None
+    just_confirmed  = False
 
-    # ── Phone validation (single entry only) ─────────────────────────────────
+    # ── Phone validation ──────────────────────────────────────────────────────
     if not phone_confirmed:
         validated = validate_indian_phone(user_text)
         if validated:
             phone_confirmed = True
+            just_confirmed  = True
             inject_note = (
                 f"[SYSTEM NOTE: Valid Indian phone number received: {validated}. "
                 f"Phone is confirmed. Now do the closing step - summarize their name, "
@@ -198,15 +203,20 @@ async def chat(req: ChatRequest):
     )
     reply = response.content[0].text
 
-    # ── Extract and save lead when capture is complete ────────────────────────
-    if phone_confirmed:
-        lead = extract_lead(messages, user_text)
-        if lead:
-            save_lead_to_sheet(lead)
-
+    # ── Save lead only once — when phone is confirmed AND lead not yet saved ───
+    # We include reply in messages so extract_lead has the full closing summary
+    if just_confirmed and not lead_saved:
+        full_messages = messages + [{"role": "assistant", "content": reply}]
+        lead = extract_lead(full_messages, user_text)
+        if lead and lead.get("name") and lead.get("phone"):
+            saved = save_lead_to_sheet(lead)
+            if saved:
+                lead_saved = True   # mark as saved so it never runs again
+        
     return ChatResponse(
         reply=reply,
         phone_confirmed=phone_confirmed,
+        lead_saved=lead_saved,
         lead=lead,
     )
 
