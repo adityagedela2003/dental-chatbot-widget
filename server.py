@@ -10,6 +10,7 @@ import json
 import gspread
 import urllib.request
 import urllib.error
+import resend
 from google.oauth2.service_account import Credentials
 from dotenv import load_dotenv
 from typing import Optional, List, Dict
@@ -84,16 +85,18 @@ def save_lead_to_sheet(lead: dict):
         print(f"Failed to save to Google Sheets: {e}")
         return False
 
-# ── SEND EMAIL ALERT (via Resend API) ────────────────────────────────────────
+# ── SEND EMAIL ALERT (via Resend SDK) ────────────────────────────────────────
 def send_lead_email(lead: dict):
-    """Send email alert using Resend API (works on Railway free tier)."""
+    """Send email alert using official Resend Python SDK."""
     try:
-        api_key        = os.getenv("RESEND_API_KEY")
-        notify_email   = os.getenv("NOTIFY_EMAIL")
+        api_key      = os.getenv("RESEND_API_KEY")
+        notify_email = os.getenv("NOTIFY_EMAIL")
 
         if not api_key or not notify_email:
             print("WARNING: RESEND_API_KEY or NOTIFY_EMAIL not set. Skipping email.")
             return False
+
+        resend.api_key = api_key
 
         from datetime import datetime
         timestamp = datetime.now().strftime("%Y-%m-%d %H:%M")
@@ -128,31 +131,15 @@ def send_lead_email(lead: dict):
         </html>
         """
 
-        payload = json.dumps({
+        params = {
             "from":    "Dental Bot <onboarding@resend.dev>",
             "to":      [notify_email],
             "subject": f"New Lead: {lead.get('name', 'Unknown')} - {CLINIC_NAME}",
             "html":    html
-        }).encode("utf-8")
-
-        req = urllib.request.Request(
-            "https://api.resend.com/emails",
-            data=payload,
-            headers={
-                "Authorization": f"Bearer {api_key}",
-                "Content-Type":  "application/json"
-            },
-            method="POST"
-        )
-        try:
-            with urllib.request.urlopen(req) as response:
-                resp_body = response.read().decode("utf-8")
-                print(f"Lead email sent successfully! Status: {response.status}, Body: {resp_body}")
-            return True
-        except urllib.error.HTTPError as e:
-            error_body = e.read().decode("utf-8")
-            print(f"Resend API error {e.code}: {error_body}")
-            return False
+        }
+        email = resend.Emails.send(params)
+        print(f"Lead email sent successfully! ID: {email['id']}")
+        return True
 
     except Exception as e:
         print(f"Failed to send email: {e}")
