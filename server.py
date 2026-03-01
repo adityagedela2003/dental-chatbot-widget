@@ -84,18 +84,23 @@ def save_lead_to_sheet(lead: dict):
         print(f"Failed to save to Google Sheets: {e}")
         return False
 
-# ── SEND EMAIL ALERT (via Resend API) ────────────────────────────────────────
+# ── SEND EMAIL ALERT (via Gmail SMTP) ────────────────────────────────────────
 def send_lead_email(lead: dict):
-    """Send email alert using Resend API."""
+    """Send email alert using Gmail SMTP port 587 (works on Railway)."""
     try:
-        api_key      = os.getenv("RESEND_API_KEY")
-        notify_email = os.getenv("NOTIFY_EMAIL")
+        import smtplib
+        from email.mime.text import MIMEText
+        from email.mime.multipart import MIMEMultipart
+        from datetime import datetime
 
-        if not api_key or not notify_email:
-            print("WARNING: RESEND_API_KEY or NOTIFY_EMAIL not set. Skipping email.")
+        gmail_address  = os.getenv("GMAIL_ADDRESS")
+        gmail_password = os.getenv("GMAIL_APP_PASSWORD")
+        notify_email   = os.getenv("NOTIFY_EMAIL", gmail_address)
+
+        if not gmail_address or not gmail_password:
+            print("WARNING: GMAIL_ADDRESS or GMAIL_APP_PASSWORD not set. Skipping email.")
             return False
 
-        from datetime import datetime
         timestamp = datetime.now().strftime("%Y-%m-%d %H:%M")
 
         html = f"""
@@ -128,31 +133,22 @@ def send_lead_email(lead: dict):
         </html>
         """
 
-        payload = json.dumps({
-            "from":    "Dental Bot <onboarding@resend.dev>",
-            "to":      [notify_email],
-            "subject": f"New Lead: {lead.get('name', 'Unknown')} - {CLINIC_NAME}",
-            "html":    html
-        }).encode("utf-8")
+        msg = MIMEMultipart("alternative")
+        msg["Subject"] = f"New Lead: {lead.get('name', 'Unknown')} - {CLINIC_NAME}"
+        msg["From"]    = gmail_address
+        msg["To"]      = notify_email
+        msg.attach(MIMEText(html, "html"))
 
-        req = urllib.request.Request(
-            "https://api.resend.com/emails",
-            data=payload,
-            headers={
-                "Authorization": f"Bearer {api_key}",
-                "Content-Type":  "application/json"
-            },
-            method="POST"
-        )
-        try:
-            with urllib.request.urlopen(req) as response:
-                resp_body = response.read().decode("utf-8")
-                print(f"Lead email sent via Resend! Status: {response.status}")
-            return True
-        except urllib.error.HTTPError as e:
-            error_body = e.read().decode("utf-8")
-            print(f"Resend API error {e.code}: {error_body}")
-            return False
+        # Port 587 with STARTTLS — Railway allows this
+        with smtplib.SMTP("smtp.gmail.com", 587) as server:
+            server.ehlo()
+            server.starttls()
+            server.ehlo()
+            server.login(gmail_address, gmail_password)
+            server.sendmail(gmail_address, notify_email, msg.as_string())
+
+        print(f"Lead email sent via Gmail to {notify_email}!")
+        return True
 
     except Exception as e:
         print(f"Failed to send email: {e}")
