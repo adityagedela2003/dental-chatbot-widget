@@ -144,9 +144,15 @@ def send_lead_email(lead: dict):
             },
             method="POST"
         )
-        with urllib.request.urlopen(req) as response:
-            print(f"Lead email sent successfully! Status: {response.status}")
-        return True
+        try:
+            with urllib.request.urlopen(req) as response:
+                resp_body = response.read().decode("utf-8")
+                print(f"Lead email sent successfully! Status: {response.status}, Body: {resp_body}")
+            return True
+        except urllib.error.HTTPError as e:
+            error_body = e.read().decode("utf-8")
+            print(f"Resend API error {e.code}: {error_body}")
+            return False
 
     except Exception as e:
         print(f"Failed to send email: {e}")
