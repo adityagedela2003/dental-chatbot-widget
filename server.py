@@ -84,15 +84,15 @@ def save_lead_to_sheet(lead: dict):
         print(f"Failed to save to Google Sheets: {e}")
         return False
 
-# ── SEND EMAIL ALERT (via Brevo API) ─────────────────────────────────────────
+# ── SEND EMAIL ALERT (via Resend API) ────────────────────────────────────────
 def send_lead_email(lead: dict):
-    """Send email alert using Brevo API."""
+    """Send email alert using Resend API."""
     try:
-        api_key      = os.getenv("BREVO_API_KEY")
+        api_key      = os.getenv("RESEND_API_KEY")
         notify_email = os.getenv("NOTIFY_EMAIL")
 
         if not api_key or not notify_email:
-            print("WARNING: BREVO_API_KEY or NOTIFY_EMAIL not set. Skipping email.")
+            print("WARNING: RESEND_API_KEY or NOTIFY_EMAIL not set. Skipping email.")
             return False
 
         from datetime import datetime
@@ -129,30 +129,29 @@ def send_lead_email(lead: dict):
         """
 
         payload = json.dumps({
-            "sender":      {"name": "Dental Bot", "email": "noreply@sendinblue.com"},
-            "to":          [{"email": notify_email}],
-            "subject":     f"New Lead: {lead.get('name', 'Unknown')} - {CLINIC_NAME}",
-            "htmlContent": html
+            "from":    "Dental Bot <onboarding@resend.dev>",
+            "to":      [notify_email],
+            "subject": f"New Lead: {lead.get('name', 'Unknown')} - {CLINIC_NAME}",
+            "html":    html
         }).encode("utf-8")
 
         req = urllib.request.Request(
-            "https://api.brevo.com/v3/smtp/email",
+            "https://api.resend.com/emails",
             data=payload,
             headers={
-                "api-key":      api_key,
-                "Content-Type": "application/json",
-                "Accept":       "application/json"
+                "Authorization": f"Bearer {api_key}",
+                "Content-Type":  "application/json"
             },
             method="POST"
         )
         try:
             with urllib.request.urlopen(req) as response:
                 resp_body = response.read().decode("utf-8")
-                print(f"Lead email sent via Brevo! Status: {response.status}")
+                print(f"Lead email sent via Resend! Status: {response.status}")
             return True
         except urllib.error.HTTPError as e:
             error_body = e.read().decode("utf-8")
-            print(f"Brevo API error {e.code}: {error_body}")
+            print(f"Resend API error {e.code}: {error_body}")
             return False
 
     except Exception as e:
