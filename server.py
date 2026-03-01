@@ -8,6 +8,9 @@ import os
 import re
 import json
 import gspread
+import smtplib
+from email.mime.text import MIMEText
+from email.mime.multipart import MIMEMultipart
 from google.oauth2.service_account import Credentials
 from dotenv import load_dotenv
 from typing import Optional, List, Dict
@@ -73,9 +76,93 @@ def save_lead_to_sheet(lead: dict):
         ]
         sheet.append_row(row)
         print("Lead saved to Google Sheets successfully!")
+
+        # Send email alert
+        send_lead_email(lead)
+
         return True
     except Exception as e:
         print(f"Failed to save to Google Sheets: {e}")
+        return False
+
+# ── SEND EMAIL ALERT ─────────────────────────────────────────────────────────
+def send_lead_email(lead: dict):
+    """Send email alert when a new lead is captured."""
+    try:
+        sender_email   = os.getenv("GMAIL_ADDRESS")
+        sender_pass    = os.getenv("GMAIL_APP_PASSWORD")
+        receiver_email = os.getenv("NOTIFY_EMAIL", sender_email)
+
+        if not sender_email or not sender_pass:
+            print("WARNING: GMAIL_ADDRESS or GMAIL_APP_PASSWORD not set. Skipping email.")
+            return False
+
+        from datetime import datetime
+        timestamp = datetime.now().strftime("%Y-%m-%d %H:%M")
+
+        # Build email
+        msg = MIMEMultipart("alternative")
+        msg["Subject"] = f"New Dental Lead: {lead.get('name', 'Unknown')} — {CLINIC_NAME}"
+        msg["From"]    = sender_email
+        msg["To"]      = receiver_email
+
+        # Plain text version
+        text = f"""
+New Lead Captured — {CLINIC_NAME}
+======================================
+Time          : {timestamp}
+Name          : {lead.get("name", "Not provided")}
+Phone         : {lead.get("phone", "Not provided")}
+Reason        : {lead.get("reason", "Not provided")}
+Patient Status: {lead.get("patient_status", "Not provided")}
+======================================
+Please call the patient to schedule their appointment.
+        """
+
+        # HTML version
+        html = f"""
+        <html>
+        <body style="font-family:Arial,sans-serif;max-width:500px;margin:0 auto;padding:20px;">
+            <div style="background:#2563eb;padding:20px;border-radius:12px 12px 0 0;">
+                <h2 style="color:white;margin:0;">🦷 New Lead Captured!</h2>
+                <p style="color:rgba(255,255,255,0.85);margin:4px 0 0;">{CLINIC_NAME}</p>
+            </div>
+            <div style="background:#f8faff;padding:20px;border-radius:0 0 12px 12px;border:1px solid #e2e8f0;">
+                <table style="width:100%;border-collapse:collapse;">
+                    <tr><td style="padding:10px;color:#64748b;width:140px;">⏰ Time</td>
+                        <td style="padding:10px;font-weight:600;color:#1e293b;">{timestamp}</td></tr>
+                    <tr style="background:white;border-radius:8px;">
+                        <td style="padding:10px;color:#64748b;">👤 Name</td>
+                        <td style="padding:10px;font-weight:600;color:#1e293b;">{lead.get("name", "Not provided")}</td></tr>
+                    <tr><td style="padding:10px;color:#64748b;">📞 Phone</td>
+                        <td style="padding:10px;font-weight:600;color:#1e293b;">{lead.get("phone", "Not provided")}</td></tr>
+                    <tr style="background:white;">
+                        <td style="padding:10px;color:#64748b;">🦷 Reason</td>
+                        <td style="padding:10px;font-weight:600;color:#1e293b;">{lead.get("reason", "Not provided")}</td></tr>
+                    <tr><td style="padding:10px;color:#64748b;">🏥 Status</td>
+                        <td style="padding:10px;font-weight:600;color:#1e293b;">{lead.get("patient_status", "Not provided")}</td></tr>
+                </table>
+                <div style="margin-top:16px;padding:14px;background:#dcfce7;border-radius:8px;color:#166534;font-weight:600;">
+                    ✅ Please call this patient to schedule their appointment!
+                </div>
+            </div>
+        </body>
+        </html>
+        """
+
+        msg.attach(MIMEText(text, "plain"))
+        msg.attach(MIMEText(html, "html"))
+
+        # Send via Gmail SMTP
+        with smtplib.SMTP_SSL("smtp.gmail.com", 465) as server:
+            server.login(sender_email, sender_pass)
+            server.sendmail(sender_email, receiver_email, msg.as_string())
+
+        print(f"Lead email sent successfully to {receiver_email}!")
+        return True
+
+    except Exception as e:
+        print(f"Failed to send email: {e}")
         return False
 
 # ── LOAD KNOWLEDGE BASE ───────────────────────────────────────────────────────
