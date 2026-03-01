@@ -139,19 +139,29 @@ def send_lead_email(lead: dict):
         msg["To"]      = notify_email
         msg.attach(MIMEText(html, "html"))
 
-        # Port 587 with STARTTLS — Railway allows this
-        with smtplib.SMTP("smtp.gmail.com", 587) as server:
+        # Port 587 with STARTTLS — with 10s timeout
+        print(f"Connecting to Gmail SMTP...")
+        with smtplib.SMTP("smtp.gmail.com", 587, timeout=10) as server:
+            print("Connected. Starting TLS...")
             server.ehlo()
             server.starttls()
             server.ehlo()
+            print("Logging in...")
             server.login(gmail_address, gmail_password)
+            print("Sending email...")
             server.sendmail(gmail_address, notify_email, msg.as_string())
 
         print(f"Lead email sent via Gmail to {notify_email}!")
         return True
 
+    except smtplib.SMTPAuthenticationError:
+        print("Gmail auth failed — check GMAIL_ADDRESS and GMAIL_APP_PASSWORD")
+        return False
+    except TimeoutError:
+        print("Gmail SMTP timed out — port 587 may be blocked on Railway")
+        return False
     except Exception as e:
-        print(f"Failed to send email: {e}")
+        print(f"Failed to send email: {type(e).__name__}: {e}")
         return False
 
 # ── LOAD KNOWLEDGE BASE ───────────────────────────────────────────────────────
@@ -290,9 +300,12 @@ async def chat(req: ChatRequest):
         full_messages = messages + [{"role": "assistant", "content": reply}]
         lead = extract_lead(full_messages, user_text)
         if lead and lead.get("name") and lead.get("phone"):
-            saved = save_lead_to_sheet(lead)
-            if saved:
-                lead_saved = True
+            # Run sheet saving + email in background so chat doesn't freeze
+            import threading
+            def save_in_background():
+                save_lead_to_sheet(lead)
+            threading.Thread(target=save_in_background, daemon=True).start()
+            lead_saved = True
         
     return ChatResponse(
         reply=reply,
